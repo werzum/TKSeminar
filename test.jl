@@ -1,33 +1,34 @@
-using CSV, DataFrames, LightGraphs, MetaGraphs, GraphPlot, Plots, StatsPlots, PackageCompiler
+using CSV, DataFrames, LightGraphs, MetaGraphs, GraphPlot, Plots, StatsPlots, PackageCompiler, Dictionaries
 
 #load dataframe and find a certain ID
 df_ids = DataFrame!(CSV.File("df_ids.csv"))
 df_en = DataFrame!(CSV.File("df_en.csv"))
-const df_en_const = df_en[1:100000,:]
+const df_en_const = df_en[1:1000000,:]
 
 #now lets attempt to build a network
 graph = SimpleGraph()
 meta_graph = MetaGraph(graph)
 
 #get unique IDs from the DF, add those vertices to the graph and give it the respective ID
-const unique_ids_from = Set(unique(df_en."From-User-Id"))
-const unique_ids_to = Set(unique(df_en."To-User-Id"))
+unique_ids_from = Set(unique(df_en."From-User-Id"))
+unique_ids_to = Set(unique(df_en."To-User-Id"))
 const unique_ids = collect(union(unique_ids_to,unique_ids_from))
 #add the vertices to the graph'
 add_vertices!(meta_graph, length(unique_ids))
 
-function create_graph(df_en,unique_ids)
+
+function create_graph(df_en,unique_ids, meta_graph)
     #create a dict with the unique ids and their position in the grap
-    for (index,val) in enumerate(unique_ids)
-        unique_ids_dict[val] = index
-    end
+    indexarr = [1:length(unique_ids)...]
+    unique_ids_new_dict = Dictionary(unique_ids,indexarr)
+
     #and add the edges
     for row in eachrow(df_en)
-        add_edge!(meta_graph,unique_ids_dict[row."From-User-Id"],unique_ids_dict[row."To-User-Id"])
+        add_edge!(meta_graph,unique_ids_new_dict[row."From-User-Id"],unique_ids_new_dict[row."To-User-Id"])
     end
 end
 
-@time create_graph(df_en_const,unique_ids)
+@time create_graph(df_en_const,unique_ids, meta_graph)
 
 function centralities()
     #show a degree histogram
