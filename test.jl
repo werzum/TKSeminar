@@ -1,13 +1,12 @@
-using CSV, DataFrames, LightGraphs, MetaGraphs, GraphPlot, Plots, StatsPlots, PackageCompiler, Dictionaries
-
+using CSV, DataFrames, LightGraphs, MetaGraphs, GraphPlot, Plots, StatsPlots, PackageCompiler, Dictionaries, Distributed
+addprocs(7)
 #load dataframe and find a certain ID
-df_ids = DataFrame!(CSV.File("df_ids.csv"))
+#df_ids = DataFrame!(CSV.File("df_ids.csv"))
 df_en = DataFrame!(CSV.File("df_en.csv"))
-const df_en_const = df_en[1:1000000,:]
+const df_en_const = df_en[1:10000000,:]
 
 #now lets attempt to build a network
-graph = SimpleGraph()
-meta_graph = MetaGraph(graph)
+const meta_graph = MetaGraph(SimpleGraph())
 
 #get unique IDs from the DF, add those vertices to the graph and give it the respective ID
 unique_ids_from = Set(unique(df_en."From-User-Id"))
@@ -21,9 +20,8 @@ function create_graph(df_en,unique_ids, meta_graph)
     #create a dict with the unique ids and their position in the grap
     indexarr = [1:length(unique_ids)...]
     unique_ids_new_dict = Dictionary(unique_ids,indexarr)
-
     #and add the edges
-    for row in eachrow(df_en)
+    @simd for row in eachrow(df_en)
         add_edge!(meta_graph,unique_ids_new_dict[row."From-User-Id"],unique_ids_new_dict[row."To-User-Id"])
     end
 end
