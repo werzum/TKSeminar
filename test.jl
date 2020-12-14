@@ -6,28 +6,38 @@ using PackageCompiler, Dictionaries, Distributed, Dates, JSON3, JSON
 df_en = DataFrame!(CSV.File("df_en.csv"))
 const df_en_const = df_en[1:1000000,:]
 
-#read the highest RT texts
-tweet_dict = JSON.parsefile("tweets_RT_UTF8.txt")
-#create dict with the texts
-tweet_ID_text_dict = Dict()
-for elm in tweet_dict
-    tweet_ID_text_dict[elm["id"]] = elm["full_text"]
-end
-#and add it to the RT df
-insertcols!(c,2, "full_text" => ["" for i in nrow(c)])
-for row in eachrow(c)
-    try
-        row."full_text" = tweet_ID_text_dict[row.Id]
-    catch
+
+function create_RT_csv()
+    #read the highest RT texts
+    tweet_dict = JSON.parsefile("tweets_RT_UTF8.txt")
+    #create dict with the texts
+    tweet_ID_text_dict = Dict()
+    tweet_ID_name_dict = Dict()
+    for elm in tweet_dict
+        tweet_ID_text_dict[elm["id"]] = elm["full_text"]
+        tweet_ID_name_dict[elm["in_reply_to_user_id_str"]] = elm["in_reply_to_screen_name"]
     end
+    #build a dict of the id - screen names
+    #and add it to the RT df
+    insertcols!(c,2, "full_text" => ["" for i in nrow(c)])
+    insertcols!(c,3, "screen_name" => ["" for i in nrow(c)])
+    for row in eachrow(c)
+        try
+            row."full_text" = tweet_ID_text_dict[row.Id]
+        catch
+        end
+        try
+            row."screen_name" = tweet_ID_name_dict[string(row."From-User-Id")]
+        catch
+        end
+    end
+    #save the DF
+    CSV.write("df_RT.csv",c)
 end
-#save the DF
-#CSV.write("df_RT.csv",c)
 
 #added an index since accessing the row index during iteration seems impossible (or well hidden)
 # CSV.write("df_en.csv",df_en)
 #df_en.:index = collect(1:nrow(df_en))
-const df_en_const = df_en[1:1000000,:]
 
 function create_selected_dfs(df_en)
     #select the million most retweeted messages
@@ -46,8 +56,6 @@ end
 
 a,b,c = create_selected_dfs(df_en)
 
-
-create_selected_dfs(df_en)
 #TODO: IDEAS for analyzing
 #use of hashtag and negativity/positivity
 #most active users (most from)-> what did they spread?
@@ -73,14 +81,6 @@ function create_graph(df_en)
     return meta_graph
 end
 
-temp_graph = create_graph(df_en_const)
-centralities(temp_graph)
-
-display(StatsPlots.histogram(degree_histogram(temp_graph),yaxis=(:log10), bins=150))
-print("global cc is $(global_clustering_coefficient(temp_graph))")
-
-@time create_graph(df_en_const)
-
 function centralities(meta_graph)
     #show a degree histogram
     display(StatsPlots.histogram(degree_histogram(temp_graph),yaxis=(:log10), bins=150))
@@ -94,11 +94,14 @@ function centralities(meta_graph)
     # display(histogram(betweenness_filtered))
 end
 
-function plot_graph(meta_graph)
-    display(gplot(meta_graph))
+function plot_graph(meta_graph,df_en)
+    #plot the graph with node labels for the underlying graph
+    display(gplot(meta_graph;nodelabel = df_en["screen_name",1:nrow(df_en)]))
 end
 
-function top_hashtags(df_en)
+function create_histogram(meta_graph)
+    display(StatsPlots.histogram(degree_histogram(meta_graph),yaxis=(:log10), bins=150))
+end
 
 #which functions?
 #for each x days in timeframe
@@ -111,18 +114,42 @@ function for_x_days(x,df_en)
     timeslots = Int(ceil(passed_days.value/x))
     prev = 1
     df_share = Int(round(nrow(df_en)/timeslots))
+    print("timeslts are $timeslots")
     for i in 1:timeslots
         print("from $prev to $i time $x")
         df_temp = df_en[prev:i*df_share,:]
         #here we can do stuff
         #create the graph
+        print("tempdf has $(nrow(df_temp))")
         graph = create_graph(df_temp)
         #and plot it
         plot_graph(graph)
         #also compute the centralities
-        centralities(graph)
+        #centralities(graph)
         #and increment the counter
         prev = prev+df_share
     end
-    end
 end
+
+for_x_days(10,df_en_const[1:10000,:])
+
+using TikzGraphs
+graph = create_graph(df_en_const[1:10000,:])
+using DrawSimpleGraphs
+@time gplot(graph)
+using GraphRecipes
+@time graphplot(graph)
+embed(G,:combin)
+using SimpleDrawing
+@time DrawSimpleGraphs.newdraw(g)
+
+using SimpleGraphs, DrawSimpleGraphs, Plots
+ G = Cube(4)
+ sg = SimpleGraph(graph)
+draw(sg)
+typeof(G)
+SimpleGraph{String}(graph)
+
+using Makie
+scene()
+Makie.scatter!(graph)
