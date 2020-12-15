@@ -55,6 +55,8 @@ function create_selected_dfs(df_en)
 end
 
 a,b,c = create_selected_dfs(df_en)
+# write_df = DataFrame("Id" => a[:,"Id"])
+# CSV.write("df_ids_RTs.csv",write_df)
 
 #TODO: IDEAS for analyzing
 #use of hashtag and negativity/positivity
@@ -94,9 +96,16 @@ function centralities(meta_graph)
     # display(histogram(betweenness_filtered))
 end
 
+c = DataFrame!(CSV.File("df_RT.csv"))
+c_small = c[end-2005:end,:]
+c_small_graph = create_graph(c_small)
+#replace missing screennames with id
+c_small = coalesce.(c_small,"Id")
+plot_graph(c_small_graph,c_small)
+
 function plot_graph(meta_graph,df_en)
     #plot the graph with node labels for the underlying graph
-    display(gplot(meta_graph;nodelabel = df_en["screen_name",1:nrow(df_en)]))
+    display(gplot(meta_graph;nodelabel = df_en[1:nrow(df_en),"screen_name"]))
 end
 
 function create_histogram(meta_graph)
