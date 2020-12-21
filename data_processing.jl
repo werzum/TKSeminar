@@ -1,7 +1,7 @@
 
 #load dataframe and find a certain ID
 #df_ids = DataFrame!(CSV.File("df_ids.csv"))
-df_en = DataFrame!(CSV.File("df_en.csv"))
+df_en = DataFrame!(CSV.File("Data\\df_en.csv"))
 const df_en_const = df_en[1:1000000,:]
 
 function alternating_mixing(df_en)
@@ -32,18 +32,20 @@ function alternating_mixing(df_en)
     sort!(result;dims=1)
 
     #and now draw tweets from the dataframe
-    #select tweets from the 100.000 most active users
-    result_active = result[end-100000:end]
-    df_active = filter(row->in(row."From-User-Id",result_active),df_en)
+    #select tweets from the 200.000 most active users
+    result_active = result[end-200000:end,1]
+    df_active = filter(row->in(row."From-User-Id",result_active),df_en[1:20000000,:])
     #and the reduce this so we remain with 3330000 tweets
-    reduce_number = 333333/nrow(df_active)
-    df_active = filter(row->(row.:index%reduce_number)==0,df_en)
+    mod_nr = round(nrow(df_active)/333333)
+    filter!(row->(row.:index%mod_nr)==0,df_active)
+
+    df_return = vcat(df_rts,df_active)
 
     #the last part gets randomly selected
-    df_random = filter(row->(row.:index%60)==0,df_en)
+    df_random = filter(row->(row.:index%30)==0,df_en)
 
     #merge the dataframes and eliminate dupes
-    df_return = vcat(df_rts,df_active,df_random)
+    df_return = vcat(df_return,df_random)
     #and return the df
     return df_return
 end
