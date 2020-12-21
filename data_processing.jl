@@ -1,11 +1,52 @@
-using CSV, DataFrames, LightGraphs, MetaGraphs, GraphPlot, Plots, StatsPlots
-using PackageCompiler, Dictionaries, Distributed, Dates, JSON3, JSON
 
 #load dataframe and find a certain ID
 #df_ids = DataFrame!(CSV.File("df_ids.csv"))
 df_en = DataFrame!(CSV.File("df_en.csv"))
 const df_en_const = df_en[1:1000000,:]
 
+function alternating_mixing(df_en)
+    #select the 1/3 most retweeted messages
+    df_rts = sort!(df_en, (:"Retweet-Count"))
+    df_rts = df_rts[end-3330000:end,:]
+
+    #generate a dict to rapidly count the number of tweets from each user
+    unique_ids_from = Set(unique(df_en."From-User-Id"))
+    a = zip(unique_ids_from,Array{Int}(undef,length(unique_ids_from)))
+    tweets_from_dict = Dict(a)
+    #and then count the tweets in the df
+    for row in eachrow(df_en)
+        tweets_from_dict[row."From-User-Id"] += 1
+    end
+
+    #create a array so we can sort this (out)
+    keys = Array{Int}(undef,0)
+    vals = Array{Int}(undef,0)
+    #extract the keys to sort them
+    for (index,val) in enumerate(tweets_from_dict)
+        if(val.first)!=0
+            push!(keys, val.first)
+            push!(vals, val.second)
+        end
+    end
+    result = hcat(keys,vals)
+    sort!(result;dims=1)
+
+    #and now draw tweets from the dataframe
+    #select tweets from the 100.000 most active users
+    result_active = result[end-100000:end]
+    df_active = filter(row->in(row."From-User-Id",result_active),df_en)
+    #and the reduce this so we remain with 3330000 tweets
+    reduce_number = 333333/nrow(df_active)
+    df_active = filter(row->(row.:index%reduce_number)==0,df_en)
+
+    #the last part gets randomly selected
+    df_random = filter(row->(row.:index%60)==0,df_en)
+
+    #merge the dataframes and eliminate dupes
+    df_return = vcat(df_rts,df_active,df_random)
+    #and return the df
+    return df_return
+end
 
 function create_RT_csv()
     #read the highest RT texts
@@ -32,8 +73,11 @@ function create_RT_csv()
         end
     end
     #save the DF
-    CSV.write("df_RT.csv",c)
+    #CSV.write("df_RT.csv",c)
+    return tweet_ID_name_dict,tweet_ID_text_dict
 end
+
+name_dict, text_dict = create_RT_csv()
 
 #added an index since accessing the row index during iteration seems impossible (or well hidden)
 # CSV.write("df_en.csv",df_en)
@@ -76,41 +120,26 @@ function create_graph(df_en)
     #create a dict with the unique ids and their position in the grap
     indexarr = [1:length(unique_ids)...]
     unique_ids_new_dict = Dictionary(unique_ids,indexarr)
+    nodelabels = []
+    for id in unique_ids
+        if haskey(name_dict,string(id))
+            #print("found key $id")
+            push!(nodelabels, name_dict[string(id)])
+        else
+            #print("did not find key $id")
+            push!(nodelabels, "")
+        end
+    end
     #and add the edges
     @simd for row in eachrow(df_en)
         add_edge!(meta_graph,unique_ids_new_dict[row."From-User-Id"],unique_ids_new_dict[row."To-User-Id"])
     end
-    return meta_graph
+    return meta_graph, nodelabels
 end
 
-function centralities(meta_graph)
-    #show a degree histogram
-    display(StatsPlots.histogram(degree_histogram(temp_graph),yaxis=(:log10), bins=150))
+graph, labels = create_graph(c[end-2005:end,:])
+plot_graph(graph,labels)
 
-    #these are too slow for 1ml networks
-    #print the global cc
-    #print("global cc is $(global_clustering_coefficient(meta_graph))")
-    #and the betweenness with 0s removed to shrink the graph somewhat
-    # betweenness = betweenness_centrality(meta_graph)
-    # betweenness_filtered = filter(x->x!=0, betweenness)
-    # display(histogram(betweenness_filtered))
-end
-
-c = DataFrame!(CSV.File("df_RT.csv"))
-c_small = c[end-2005:end,:]
-c_small_graph = create_graph(c_small)
-#replace missing screennames with id
-c_small = coalesce.(c_small,"Id")
-plot_graph(c_small_graph,c_small)
-
-function plot_graph(meta_graph,df_en)
-    #plot the graph with node labels for the underlying graph
-    display(gplot(meta_graph;nodelabel = df_en[1:nrow(df_en),"screen_name"]))
-end
-
-function create_histogram(meta_graph)
-    display(StatsPlots.histogram(degree_histogram(meta_graph),yaxis=(:log10), bins=150))
-end
 
 #which functions?
 #for each x days in timeframe
@@ -139,26 +168,3 @@ function for_x_days(x,df_en)
         prev = prev+df_share
     end
 end
-
-for_x_days(10,df_en_const[1:10000,:])
-
-using TikzGraphs
-graph = create_graph(df_en_const[1:10000,:])
-using DrawSimpleGraphs
-@time gplot(graph)
-using GraphRecipes
-@time graphplot(graph)
-embed(G,:combin)
-using SimpleDrawing
-@time DrawSimpleGraphs.newdraw(g)
-
-using SimpleGraphs, DrawSimpleGraphs, Plots
- G = Cube(4)
- sg = SimpleGraph(graph)
-draw(sg)
-typeof(G)
-SimpleGraph{String}(graph)
-
-using Makie
-scene()
-Makie.scatter!(graph)
