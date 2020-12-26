@@ -9,6 +9,14 @@ function alternating_mixing(df_en)
     df_rts = sort!(df_en, (:"Retweet-Count"))
     df_rts = df_rts[end-3330000:end,:]
 
+    #get randomly selected tweets not in the retweet dataframe
+    df_random = df_en[shuffle(axes(df_en,1)),:]
+    #select 1ml randomly to speed things up
+    df_random = df_random[1:1000000,:]
+    rows = eachrow(df_rts)
+    df_random = filter(row->!in(row."From-User-Id",rows),df_random)
+    df_random = df_random[1:333333,:]
+
     #generate a dict to rapidly count the number of tweets from each user
     unique_ids_from = Set(unique(df_en."From-User-Id"))
     a = zip(unique_ids_from,Array{Int}(undef,length(unique_ids_from)))
@@ -34,18 +42,20 @@ function alternating_mixing(df_en)
     #and now draw tweets from the dataframe
     #select tweets from the 200.000 most active users
     result_active = result[end-200000:end,1]
-    df_active = filter(row->in(row."From-User-Id",result_active),df_en[1:20000000,:])
+    rows = eachrow(result_active)
+    df_active = filter(row->in(row."From-User-Id",rows),df_en)
+    #filter the duplicates from the random and retweet dataframe
+    rows = eachrow(df_rts)
+    df_active = filter(row->!in(row."From-User-Id",rows),df_active)
+    rows = eachrow(df_random)
+    df_active = filter(row->!in(row."From-User-Id",rows),df_active)
+    print(nrow(df_active))
     #and the reduce this so we remain with 3330000 tweets
-    mod_nr = round(nrow(df_active)/333333)
-    filter!(row->(row.:index%mod_nr)==0,df_active)
-
-    df_return = vcat(df_rts,df_active)
-
-    #the last part gets randomly selected
-    df_random = filter(row->(row.:index%30)==0,df_en)
+    df_active = df_active[shuffle(axes(df_active,1)),:]
+    df_active = df_active[1:333333,:]
 
     #merge the dataframes and eliminate dupes
-    df_return = vcat(df_return,df_random)
+    df_return = vcat(df_rts,df_random,df_active)
     #and return the df
     return df_return
 end
