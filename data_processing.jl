@@ -1,21 +1,38 @@
 
 #load dataframe and find a certain ID
-#df_ids = DataFrame!(CSV.File("df_ids.csv"))
+df_ids = DataFrame!(CSV.File("df_ids_alternating.csv"))[1:end,"Id"]
+df_ids = DataFrame!(:ID => df_random[1:end,"Id"])
+CSV.write("df_ids_2",df_ids)
 df_en = DataFrame!(CSV.File("Data\\df_en.csv"))
+df_alternating =  DataFrame!(CSV.File("df_alternating_new.csv"))
+df_en_matched =  DataFrame!(CSV.File("df_en_full_text.csv"))
+
 const df_en_const = df_en[1:1000000,:]
+a = alternating_mixing(df_en)
+
+for row in eachrow(df_en)
+    try
+        row."full_text" = text_dict[row.Id]
+    catch
+    end
+    try
+        row."screen_name" = name_dict[string(row."From-User-Id")]
+    catch
+    end
+end
 
 function alternating_mixing(df_en)
     #select the 1/3 most retweeted messages
-    df_rts = sort!(df_en, (:"Retweet-Count"))
-    df_rts = df_rts[end-3330000:end,:]
+    df_rts = sort(df_en, (:"Retweet-Count"))
+    df_rts = df_rts[end-333333:end,:]
 
     #get randomly selected tweets not in the retweet dataframe
     df_random = df_en[shuffle(axes(df_en,1)),:]
-    #select 1ml randomly to speed things up
-    df_random = df_random[1:1000000,:]
-    rows = eachrow(df_rts)
-    df_random = filter(row->!in(row."From-User-Id",rows),df_random)
-    df_random = df_random[1:333333,:]
+    # #select 1ml randomly to speed things up
+    # df_random = df_random[1:1000000,:]
+    # rows = eachrow(df_rts)
+    # df_random = filter(row->!in(row."From-User-Id",rows),df_random)
+    df_random = df_random[1:200000,:]
 
     #generate a dict to rapidly count the number of tweets from each user
     unique_ids_from = Set(unique(df_en."From-User-Id"))
@@ -42,13 +59,13 @@ function alternating_mixing(df_en)
     #and now draw tweets from the dataframe
     #select tweets from the 200.000 most active users
     result_active = result[end-200000:end,1]
-    rows = eachrow(result_active)
-    df_active = filter(row->in(row."From-User-Id",rows),df_en)
-    #filter the duplicates from the random and retweet dataframe
-    rows = eachrow(df_rts)
-    df_active = filter(row->!in(row."From-User-Id",rows),df_active)
-    rows = eachrow(df_random)
-    df_active = filter(row->!in(row."From-User-Id",rows),df_active)
+    # rows = eachrow(result_active)
+    df_active = filter(row->in(row."From-User-Id",result_active),df_en)
+    # #filter the duplicates from the random and retweet dataframe
+    # rows = eachrow(df_rts)
+    # df_active = filter(row->!in(row."From-User-Id",rows),df_active)
+    # rows = eachrow(df_random)
+    # df_active = filter(row->!in(row."From-User-Id",rows),df_active)
     print(nrow(df_active))
     #and the reduce this so we remain with 3330000 tweets
     df_active = df_active[shuffle(axes(df_active,1)),:]
@@ -60,21 +77,66 @@ function alternating_mixing(df_en)
     return df_return
 end
 
-function create_RT_csv()
-    #read the highest RT texts
-    tweet_dict = JSON.parsefile("tweets_RT_UTF8.txt")
+#load tweets from JSON
+words = readlines("df_tweets_alternating_2.jsonl", enc"UTF-16")
+#build several dicts from the content
+dict = tweet_dict_f(words)
+dict_id = [x["id"] for x in dict]
+dict_text = [x["full_text"] for x in dict]
+dict_name = [x["user"]["name"] for x in dict]
+dict_2 = Dict(zip(dict_id,dict_text))
+dict_3 = Dict(zip(dict_id,dict_name))
+#filter the big df for the ids of the tweets
+small_df = @where(df_en, in.(:Id,[keys(dict_2)]))
+# insertcols!(small_df,2, "full_text" => ["" for i in nrow(small_df)])
+# insertcols!(small_df,3, "screen_name" => ["" for i in nrow(small_df)])
+#and bring that back together here
+small_df = @eachrow small_df begin
+    :full_text = dict_2[:Id]
+    :screen_name = dict_3[:Id]
+end
+
+CSV.write("df_final.csv",df_full)
+
+df_full = DataFrame!()
+df_9_10 = DataFrame(CSV.File("df_9_10.csv";threaded=false))
+df_full = vcat(df_full,df_9_10)
+for i in 1:8
+    println(i)
+    df_temp = DataFrame(CSV.File("df_$i.csv"))
+    df_full = vcat(df_full,df_temp)
+end
+
+file = open("df_1.csv")
+cleanfunction(string) = replace(string,"\"\"" =>"\"")
+cleaned_file = IOBuffer(cleanfunction(read(file,String)))
+test=CSV.read(cleaned_file,DataFrame)
+
+haskey(dict_2,1278368973948694528)
+function tweet_dict_f(words)
+    tweet_dict = Array{Any}(undef,0)
+
+    @simd for value in words
+        push!(tweet_dict,JSON.parse(value))
+    end
+    return tweet_dict
+end
+
+function create_RT_csv(df,words)
+
     #create dict with the texts
     tweet_ID_text_dict = Dict()
     tweet_ID_name_dict = Dict()
-    for elm in tweet_dict
+    for elm in words
+        elm = JSON.parse(elm)
         tweet_ID_text_dict[elm["id"]] = elm["full_text"]
         tweet_ID_name_dict[elm["in_reply_to_user_id_str"]] = elm["in_reply_to_screen_name"]
     end
     #build a dict of the id - screen names
     #and add it to the RT df
-    insertcols!(c,2, "full_text" => ["" for i in nrow(c)])
-    insertcols!(c,3, "screen_name" => ["" for i in nrow(c)])
-    for row in eachrow(c)
+    insertcols!(df_en,2, "full_text" => ["" for i in nrow(df_en)])
+    insertcols!(df_en,3, "screen_name" => ["" for i in nrow(df_en)])
+    for row in eachrow(df)
         try
             row."full_text" = tweet_ID_text_dict[row.Id]
         catch
@@ -85,34 +147,23 @@ function create_RT_csv()
         end
     end
     #save the DF
-    #CSV.write("df_RT.csv",c)
+    CSV.write("df_en_full_text.csv",a)
     return tweet_ID_name_dict,tweet_ID_text_dict
 end
 
-name_dict, text_dict = create_RT_csv()
+name_dict, text_dict = create_RT_csv(df_alternating,words)
+using DataFramesMeta
+a = @where(df_en, :full_text != "")
+a = filter(x -> (x.:full_text != "",df_en)
+dropmissing!(df_en)
+a = @where(df_en, :Id .> in(:Id,df_ids))
 
-#added an index since accessing the row index during iteration seems impossible (or well hidden)
-# CSV.write("df_en.csv",df_en)
-#df_en.:index = collect(1:nrow(df_en))
+df_en[1,"Id"]
+push!(df_ids,1278368973948694528)
+in(1278368973948694528,df_ids)
 
-function create_selected_dfs(df_en)
-    #select the million most retweeted messages
-    df_rts = sort!(df_en, (:"Retweet-Count"))
-    df_rts = df_rts[end-1000000:end,:]
-
-    #select each nth row to reduce the dataframe to 1 million tweetssoun
-    df_1ml = filter(row->(row.:index%21)==0,df_en)
-
-    #select the million/100.000 most polarized tweets
-    df_pol = sort!(df_en, (:"Score"))
-    df_pol = vcat(df_pol[1:50000,:],df_pol[end-50000:end,:])
-
-    return df_rts,df_1ml,df_pol
-end
-
-a,b,c = create_selected_dfs(df_en)
+# a,b,c = create_selected_dfs(df_en)
 # write_df = DataFrame("Id" => a[:,"Id"])
-# CSV.write("df_ids_RTs.csv",write_df)
 
 #TODO: IDEAS for analyzing
 #use of hashtag and negativity/positivity
