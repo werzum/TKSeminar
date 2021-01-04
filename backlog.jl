@@ -76,3 +76,24 @@ end
 df_en_matched =  DataFrame!(CSV.File("df_en_full_text.csv"))
 const df_en_const = df_en[1:1000000,:]
 a = alternating_mixing(df_en)
+
+#adjust column names so we have symbols
+insertcols!(df_en,1, :Created => [Date(2013) for i in 1:nrow(df_en)])
+select!(hashtag_df,Not(:CreatedAt))
+#parse the dates so we can sort them
+allowmissing!(df_en)
+for row in eachrow(df_en)
+    try
+        row.:Created = Date(match(r"^[^\s]+",row.:CreatedAt).match,"m/d/y")
+    catch
+        row.:Created = missing
+    end
+end
+dropmissing!(df_en)
+sort!(df_en,(:Created))
+#and drop old dates
+select!(df_en,Not(:CreatedAt))
+
+CSV.write("df_final_dates.csv",df_en)
+
+dates = [Date(match(r"^[^\s]+",hashtag_df[i,:CreatedAt]).match,"m/d/y") for i in 1:nrow(hashtag_df)]

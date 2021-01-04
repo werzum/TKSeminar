@@ -118,30 +118,29 @@ end
 graph, labels = create_graph(c[end-2005:end,:])
 plot_graph(graph,labels)
 
-#which functions?
 #for each x days in timeframe
-function for_x_days(x,df_en)
+function for_x_days(x,df_en,func)
     #compute the time passed
-    first_day = Date(df_en[1,"Created-At"][1:end-8],"m/d/y")
-    last_day = Date(df_en[end,"Created-At"][1:end-8],"m/d/y")
-    passed_days = last_day-first_day
-    #slice these days in x pieces, select the range in the DataFrame
-    timeslots = Int(ceil(passed_days.value/x))
-    prev = 1
-    df_share = Int(round(nrow(df_en)/timeslots))
-    print("timeslts are $timeslots")
-    for i in 1:timeslots
-        print("from $prev to $i time $x")
-        df_temp = df_en[prev:i*df_share,:]
-        #here we can do stuff
-        #create the graph
-        print("tempdf has $(nrow(df_temp))")
-        graph = create_graph(df_temp)
-        #and plot it
-        plot_graph(graph)
-        #also compute the centralities
-        #centralities(graph)
+    first_day = df_en[1,:Created]
+    current_day = df_en[1,:Created]
+    nrows = 1
+
+    while nrows>0
+        print("iterating")
+        #select all days between current_day and current_day+x days
+        temp_df = @where(df_en, :Created.>=current_day,
+                                :Created.<current_day+Dates.Day(x))
+        #check if there are entries and break if there are none
+        nrows = nrow(temp_df)
+        #call the callback
+        func(temp_df)
         #and increment the counter
-        prev = prev+df_share
+        current_day = current_day+Dates.Day(x)
     end
+end
+
+for_x_days(7,hashtag_df,tf)
+
+function tf(df)
+    println(nrow(df))
 end
