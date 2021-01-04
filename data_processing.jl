@@ -120,27 +120,26 @@ plot_graph(graph,labels)
 
 #for each x days in timeframe
 function for_x_days(x,df_en,func)
-    #compute the time passed
     first_day = df_en[1,:Created]
     current_day = df_en[1,:Created]
     nrows = 1
-
+    #container
+    arr = []
+    #a sweet exit condition
     while nrows>0
-        print("iterating")
         #select all days between current_day and current_day+x days
         temp_df = @where(df_en, :Created.>=current_day,
                                 :Created.<current_day+Dates.Day(x))
         #check if there are entries and break if there are none
         nrows = nrow(temp_df)
+        println(nrows)
+        nrows == 0 && continue
         #call the callback
-        func(temp_df)
-        #and increment the counter
+        result = func(temp_df)
+        #and add the output to the array which is returned
+        push!(arr,result)
+        #increment the counter
         current_day = current_day+Dates.Day(x)
     end
-end
-
-for_x_days(7,hashtag_df,tf)
-
-function tf(df)
-    println(nrow(df))
+    return arr
 end
