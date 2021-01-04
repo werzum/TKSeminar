@@ -89,10 +89,11 @@ for row in eachrow(df_en)
         row.:Created = missing
     end
 end
-dropmissing!(df_en)
+#filter out missing dates
+filter!(row->!ismissing(row.:Created), df_en)
 sort!(df_en,(:Created))
 #and drop old dates
-select!(df_en,Not(:CreatedAt))
+select!(df_en,Not(:Created))
 
 CSV.write("df_final_dates.csv",df_en)
 

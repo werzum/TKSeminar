@@ -143,3 +143,5 @@ function for_x_days(x,df_en,func)
     end
     return arr
 end
+
+for_x_days(7,df_en,tf)
