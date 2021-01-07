@@ -1,10 +1,16 @@
 #load tweets and select only ones of english language
-df = DataFrame!(CSV.File("tweets.csv"))
+df = DataFrame!(CSV.File("df_final_dates.csv"))
+df_random = df[shuffle(axes(df,1)),:]
+df_random = df_random[1:214104,:]
+
+df_full = vcat(df_full,df_random)
+
+
 df_en = filter(x -> x.Language == "en", df)
 CSV.write("df_en.csv", df_en)
 #get tweet IDs and save them to a new csv
 df_ids = DataFrame()
-df_ids."Ids" = df_en.Id
+df_ids."Ids" = df_random.Id
 CSV.write("df_ids.csv", df_ids)
 #for most RTet
 df_ids_RTs = DataFrame()
@@ -26,17 +32,17 @@ dropmissing!(df_en)
 a = @where(df_en, :Id .> in(:Id,df_ids))
 
 #piecing together the final DF
-CSV.write("df_final.csv",df_full)
+CSV.write("Data\\V3\\df_final.csv",df_full)
 
 df_full = DataFrame!()
-df_9_10 = DataFrame(CSV.File("df_9_10.csv";threaded=false))
+df_9_10 = DataFrame(CSV.File("Data\\V3\\df_7.csv";threaded=false))
 df_full = vcat(df_full,df_9_10)
-for i in 1:8
+for i in 7:8
     println(i)
-    df_temp = DataFrame(CSV.File("df_$i.csv"))
+    df_temp = DataFrame(CSV.File("Data\\V3\\df_8.csv"))
     df_full = vcat(df_full,df_temp)
 end
-
+unique!(df_full)
 file = open("df_1.csv")
 cleanfunction(string) = replace(string,"\"\"" =>"\"")
 cleaned_file = IOBuffer(cleanfunction(read(file,String)))
@@ -53,24 +59,26 @@ function tweet_dict_f(words)
 end
 
 #load tweets from JSON
-words = readlines("df_tweets_alternating_2.jsonl", enc"UTF-16")
+words = readlines("Data\\V3\\json.jsonl", enc"UTF-16")
 #build several dicts from the content
-dict = tweet_dict_f(words)
+dict = tweet_dict_f(words[700001:end])
 dict_id = [x["id"] for x in dict]
 dict_text = [x["full_text"] for x in dict]
 dict_name = [x["user"]["name"] for x in dict]
 dict_2 = Dict(zip(dict_id,dict_text))
 dict_3 = Dict(zip(dict_id,dict_name))
 #filter the big df for the ids of the tweets
-small_df = @where(df_en, in.(:Id,[keys(dict_2)]))
-# insertcols!(small_df,2, "full_text" => ["" for i in nrow(small_df)])
-# insertcols!(small_df,3, "screen_name" => ["" for i in nrow(small_df)])
+small_df = @where(df_random, in.(:Id,[keys(dict_2)]))
+insertcols!(small_df,2, :FullText => ["" for i in nrow(small_df)])
+insertcols!(small_df,3, :ScreenName => ["" for i in nrow(small_df)])
 #and bring that back together here
 small_df = @eachrow small_df begin
-    :full_text = dict_2[:Id]
-    :screen_name = dict_3[:Id]
+    :FullText = dict_2[:Id]
+    :ScreenName = dict_3[:Id]
 end
+CSV.write("Data\\V3\\df_8.csv",small_df)
 
+#take last ID from words, delete until then in df_ids, then do twarc again
 #loading dfs
 #df_alternating =  DataFrame!(CSV.File("df_alternating_new.csv"))
 df_en_matched =  DataFrame!(CSV.File("df_en_full_text.csv"))
@@ -78,23 +86,33 @@ const df_en_const = df_en[1:1000000,:]
 a = alternating_mixing(df_en)
 
 #adjust column names so we have symbols
-insertcols!(df_en,1, :Created => [Date(2013) for i in 1:nrow(df_en)])
+insertcols!(df_full,1, :Created => [Date(2013) for i in 1:nrow(df_full)])
+insertcols!(df_full,3, :CreatedAt1 => [df_full[i,"CreatedAt"] for i in 1:nrow(df_full)])
 select!(hashtag_df,Not(:CreatedAt))
 #parse the dates so we can sort them
-allowmissing!(df_en)
-for row in eachrow(df_en)
+allowmissing!(df_full)
+@simd for row in eachrow(df_full)
     try
-        row.:Created = Date(match(r"^[^\s]+",row.:CreatedAt).match,"m/d/y")
+        row.:Created2 = Date(match(r"^[^\s]+",row.:Created).match,"m/d/y")
     catch
-        row.:Created = missing
+        if typeof(row.:Created) == Date
+            row.:Created2 = row.:Created
+        else
+            row.:Created2 = missing
+        end
     end
 end
-#filter out missing dates
-filter!(row->!ismissing(row.:Created), df_en)
-sort!(df_en,(:Created))
-#and drop old dates
-select!(df_en,Not(:Created))
 
-CSV.write("df_final_dates.csv",df_en)
+df_full[1:end,:Created] = df_full[1:end,:Created2]
+#filter out missing dates
+filter!(row->!ismissing(row.:Created), df_random)
+sort!(df_full,(:Created))
+#and drop old dates
+select!(df_full,Not(:Created2))
+df_full = DataFrame!(CSV.File("Data\\V3\\df_even_dates.csv"))
+dropmissing(df_full)
+
+CSV.write("Data\\V3\\df_even_dates.csv",df_full)
+CSV.write("Data\\V3\\df_even_dates_ids.csv",df_ids)
 
 dates = [Date(match(r"^[^\s]+",hashtag_df[i,:CreatedAt]).match,"m/d/y") for i in 1:nrow(hashtag_df)]

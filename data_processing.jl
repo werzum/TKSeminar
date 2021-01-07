@@ -1,6 +1,12 @@
 
 #load dataframe
-df_en = DataFrame!(CSV.File("df_final.csv"))
+df_random = DataFrame!(CSV.File("Data\\V3\\df_even_dates.csv"))
+df_random = df_en[shuffle(axes(df_en,1)),:]
+df_random = df_random[1:10000000,:]
+
+a = alternating_mixing(df_random)
+df_random = a
+
 
 function alternating_mixing(df_en)
     #select the 1/3 most retweeted messages
@@ -13,14 +19,14 @@ function alternating_mixing(df_en)
     # df_random = df_random[1:1000000,:]
     # rows = eachrow(df_rts)
     # df_random = filter(row->!in(row."From-User-Id",rows),df_random)
-    df_random = df_random[1:200000,:]
+    df_random = df_random[1:333333,:]
 
     #generate a dict to rapidly count the number of tweets from each user
     unique_ids_from = Set(unique(df_en."From-User-Id"))
     a = zip(unique_ids_from,Array{Int}(undef,length(unique_ids_from)))
     tweets_from_dict = Dict(a)
     #and then count the tweets in the df
-    for row in eachrow(df_en)
+    @simd for row in eachrow(df_en)
         tweets_from_dict[row."From-User-Id"] += 1
     end
 
@@ -28,7 +34,7 @@ function alternating_mixing(df_en)
     keys = Array{Int}(undef,0)
     vals = Array{Int}(undef,0)
     #extract the keys to sort them
-    for (index,val) in enumerate(tweets_from_dict)
+    @simd for (index,val) in enumerate(tweets_from_dict)
         if(val.first)!=0
             push!(keys, val.first)
             push!(vals, val.second)
@@ -144,4 +150,7 @@ function for_x_days(x,df_en,func)
     return arr
 end
 
-for_x_days(7,df_en,tf)
+function tf(df)
+    println(nrow(df))
+end
+for_x_days(7,df_full,tf)
