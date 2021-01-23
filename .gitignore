@@ -3,8 +3,10 @@ df_en.csv
 df_ids.csv
 twarc.log
 sys_plots.so
+.env
 
 *.csv
 *.txt
 *.json
 *.jsonl
+*.env
