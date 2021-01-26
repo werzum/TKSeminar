@@ -35,14 +35,47 @@ toptags = for_x_days(7,hashtag_df,top_hashtags)
 #get the top hashtags
 top1count = [x[1][1] for x in toptags]
 top1tags = [x[1][2] for x in toptags]
-plot(top1count)
+#create a date array for better x-axis
+#which can sadly apparently not be used simultaneously with the annotations - sad!
+dates = [df_en[1,"Created"]+Dates.Day(7*i) for i in 0:19]
+plot(top1count,xlabel="Time in weeks",ylabel="Amount of Hashtag mentions",label="",size=(800,500))
 #generate the annotations
 anno = [(i, top1count[i], text(top1tags[i],8)) for i in 1:length(toptags)]
 annotate!(anno)
 
-#do it again with second highest tags
-top2count = [x[2][1] for x in toptags]
-top2tags = [x[2][2] for x in toptags]
-plot!(top2count)
-anno = [(i, top2count[i], text(top2tags[i],8)) for i in 1:length(toptags)]
-annotate!(anno)
+# #do it again with second highest tags
+# top2count = [x[2][1] for x in toptags]
+# top2tags = [x[2][2] for x in toptags]
+# plot!(top2count)
+# anno = [(i, top2count[i], text(top2tags[i],8)) for i in 1:length(toptags)]
+# annotate!(anno)
+
+#sort by RTs
+df_rts = sort(df_en, (:"Retweet-Count"))
+df_rts = df_rts[end-10:end,:]
+#drop columns so we have relevant
+select!(df_rts,["CreatedAt","FullText","ScreenName","Retweet-Count"])
+#so retweet score counts how often the retweeted tweet has been RTed, not this one - therefore we get only randos there
+
+#get active df
+#in data_processing
+#and select rows of 10 top active with their content
+select!(df_active,["CreatedAt","FullText","ScreenName","Retweet-Count"])
+print(df_active)
+#and get the latex output
+print(latexify(df_active, latex=false, env=:table))
+#now for the same df but with 1000 most important
+
+#get old df to update to-user-id
+df_en1 = DataFrame!(CSV.File("Data\\V1\\df_en.csv"))
+dict_en1 = Dictionary(df_en1[:,"Id"],df_en1[:,"To-User-Id"])
+for row in eachrow(df_en)
+    try
+        row."To-User-Id" = dict_en1[row."Id"]
+    catch
+        row."To-User-Id" = -1
+    end
+end
+
+graph = create_graph(df_active)
+plot_graph(graph;labels=false)
