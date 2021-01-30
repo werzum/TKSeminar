@@ -126,13 +126,13 @@ a = alternating_mixing(df_random)
 df_random = a
 
 #convert row of df to int
-df_en[!, "Id"] = convert.(Int, df_en[:, "Id"])
+df_en[!, "From-User-Id"] = Int.(parse.(Float64, df_en[:, "From-User-Id"]))
 
 #checking the df for trump content
-dropmissing(df_en)
-filter!(x-> !ismissing(x."ScreenName"), df_en)
+dropmissing!(df_en)
+filter!(x-> !ismissing(x."From-User-Id"), df_en)
 #tweets from trump
-println(filter(x-> Int(x."To-User-Id") ==   25073877, df_en))
+println(filter(x-> Int(x."From-User-Id") ==   25073877, df_en))
 #tweets from screen name trump
 println(filter(x-> x."ScreenName" == "Donald J. Trump", df_en))
 #tweets with wrong trump id

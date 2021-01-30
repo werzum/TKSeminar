@@ -1,3 +1,8 @@
+#a nice function that scales input
+function scale(min_m,max_m,min_t,max_t,m)
+    return (m-min_m)/(max_m-min_m)*(max_t-min_t)+min_t
+end
+
 function alternating_mixing(df_en)
     #select the 1/3 most retweeted messages
     df_rts = sort(df_en, (:"Retweet-Count"))
@@ -85,10 +90,12 @@ function create_RT_csv(df,words)
     return tweet_ID_name_dict,tweet_ID_text_dict
 end
 
+dropmissing!(df_en)
 function create_graph(df_en,nodenumber)
     meta_graph = MetaGraph(SimpleGraph())
 
     df_en = @where(df_en, :ScreenName != Missing)
+    df_en[!, "ScreenName"] = convert.(String, df_en[:, "ScreenName"])
     #1. generate set of user ids and the corresonding names
     #get unique IDs from the DF, add those vertices to the graph and give it the respective ID
     unique_ids_from = Int64.(Set(unique(df_en."From-User-Id")))
@@ -119,6 +126,8 @@ function create_graph(df_en,nodenumber)
             rt_dict[row."ScreenName"] = 1
         end
     end
+
+
     #4. and now add edges
     for row in eachrow(df_en[1:nodenumber,:])
         if (!(haskey(id_dict, row."To-User-Id")) || !(haskey(id_dict, row."From-User-Id")))
@@ -191,19 +200,27 @@ function create_graph(df_en,nodenumber)
     end
     #and get the rt counts in order
     nodesizes = ones(length(nodelabels))
+    nodecolors = [colorant"black" for i in 1:length(nodelabels)]
     @simd for i in collect(keys(rt_dict))
         #set the index of the nodesizes array to the screen name -> position mapping of the name dict
         #to the rt count entry of the rt dict
         try
             nodesizes[name_dict[i]] = rt_dict[i]
+            try
+                b = Int16(round(scale(0,10000,0,256,nodesizes[name_dict[i]])))
+                b > 256 && (b = 256)
+                nodecolors[name_dict[i]]=cgrad(:viridis)[b]
+
+            catch
+            end
         catch
         end
     end
-    return meta_graph, nodelabels, nodesizes
+    return meta_graph, nodelabels, nodesizes, nodecolors
 end
 
 df_random = df_en[shuffle(axes(df_en,1)),:]
-@time graph,labels,sizes = create_graph(df_en,2000)
+@time graph,labels,sizes,colors = create_graph(df_en,1000)
 plot_graph(graph,labels)
 
 

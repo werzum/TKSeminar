@@ -15,12 +15,16 @@ end
 
 create_histogram(graph)
 
-function plot_graph(meta_graph, labels)
+using GraphRecipes, Plots
+using LightGraphs
+
+function plot_graph(meta_graph, labels, sizes, colors)
     #plot the graph with node labels for the underlying graph
-    draw(PNG("mygraph.png", 100cm, 100cm), gplot(meta_graph, nodelabel = labels, NODELABELSIZE=5, layout=stressmajorize_layout))
+    draw(PNG("mygraph.png", 100cm, 100cm), gplot(meta_graph, nodesize = sizes,NODESIZE=0.09, nodelabel = labels, nodelabelsize = sizes, nodelabeldist=1.5, nodefillc = colors, NODELABELSIZE=3))
 end
 
-plot_graph(graph,labels)
+#need to scale the sizes so that they are more evenly distributed
+@time plot_graph(graph,labels,sizes, colors)
 gplot(graph;nodelabel = labels)
 
 # create_histogram(graph)
