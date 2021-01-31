@@ -1,17 +1,12 @@
-
-#load dataframe
-df_random = DataFrame!(CSV.File("Data\\V3\\df_even_dates.csv"))
-df_random = df_en[shuffle(axes(df_en,1)),:]
-df_random = df_random[1:10000000,:]
-
-a = alternating_mixing(df_random)
-df_random = a
-
+#a nice function that scales input
+function scale(min_m,max_m,min_t,max_t,m)
+    return (m-min_m)/(max_m-min_m)*(max_t-min_t)+min_t
+end
 
 function alternating_mixing(df_en)
     #select the 1/3 most retweeted messages
     df_rts = sort(df_en, (:"Retweet-Count"))
-    df_rts = df_rts[end-333333:end,:]
+    df_rts = df_rts[end-1000:end,:]
 
     #get randomly selected tweets not in the retweet dataframe
     df_random = df_en[shuffle(axes(df_en,1)),:]
@@ -34,10 +29,12 @@ function alternating_mixing(df_en)
     keys = Array{Int}(undef,0)
     vals = Array{Int}(undef,0)
     #extract the keys to sort them
-    @simd for (index,val) in enumerate(tweets_from_dict)
-        if(val.first)!=0
-            push!(keys, val.first)
-            push!(vals, val.second)
+    for (index,val) in enumerate(tweets_from_dict)
+        if(!ismissing(val.first))
+            if(val.first)!=0
+                    push!(keys, val.first)
+                    push!(vals, val.second)
+            end
         end
     end
     result = hcat(keys,vals)
@@ -45,9 +42,9 @@ function alternating_mixing(df_en)
 
     #and now draw tweets from the dataframe
     #select tweets from the 200.000 most active users
-    result_active = result[end-200000:end,1]
+    result_active = result[end-10000:end,1]
     # rows = eachrow(result_active)
-    df_active = filter(row->in(row."From-User-Id",result_active),df_en)
+    df_active = filter(row-> !ismissing(row."From-User-Id") && in(row."From-User-Id",result_active),df_en)
     # #filter the duplicates from the random and retweet dataframe
     # rows = eachrow(df_rts)
     # df_active = filter(row->!in(row."From-User-Id",rows),df_active)
@@ -89,40 +86,147 @@ function create_RT_csv(df,words)
         end
     end
     #save the DF
-    CSV.write("df_en_full_text.csv",a)
+    # CSV.write("df_en_full_text.csv",a)
     return tweet_ID_name_dict,tweet_ID_text_dict
 end
 
-function create_graph(df_en)
+dropmissing!(df_en)
+function create_graph(df_en,nodenumber)
     meta_graph = MetaGraph(SimpleGraph())
+
+    df_en = @where(df_en, :ScreenName != Missing)
+    df_en[!, "ScreenName"] = convert.(String, df_en[:, "ScreenName"])
+    #1. generate set of user ids and the corresonding names
     #get unique IDs from the DF, add those vertices to the graph and give it the respective ID
-    unique_ids_from = Set(unique(df_en."From-User-Id"))
-    unique_ids_to = Set(unique(df_en."To-User-Id"))
+    unique_ids_from = Int64.(Set(unique(df_en."From-User-Id")))
+    unique_ids_to = Int64.(Set(unique(df_en."To-User-Id")))
     unique_ids = collect(union(unique_ids_to,unique_ids_from))
-    #add the vertices to the graph'
-    add_vertices!(meta_graph, length(unique_ids))
-    #create a dict with the unique ids and their position in the grap
-    indexarr = [1:length(unique_ids)...]
-    unique_ids_new_dict = Dictionary(unique_ids,indexarr)
-    nodelabels = []
-    for id in unique_ids
-        if haskey(name_dict,string(id))
-            #print("found key $id")
-            push!(nodelabels, name_dict[string(id)])
+
+    #2.create dict of names and their index
+    names = unique(df_en[1:nodenumber,"ScreenName"])
+    indexarr = [1:length(names)...]
+    name_dict = Dict(zip(names,indexarr))
+    nodelabels = names
+    #and create dict of names and their id
+    id_dict = Dict()
+    @simd for row in eachrow(df_en)
+        id_dict[row."From-User-Id"] = row."ScreenName"
+    end
+
+    #3. add #nr unique names to graph
+    add_vertices!(meta_graph, length(nodelabels))
+
+    #4. generate a dict with the screenname and the number of retweets
+    rt_dict = Dict(zip(collect(df_en."ScreenName"),zeros(nrow(df_en))))
+    #5. and iterate over the df to count the retweets
+    @simd for row in eachrow(df_en)
+        if !occursin("RT @", row."FullText")
+            rt_dict[row."ScreenName"] += row."Retweet-Count"
         else
-            #print("did not find key $id")
-            push!(nodelabels, "")
+            rt_dict[row."ScreenName"] = 1
         end
     end
-    #and add the edges
-    @simd for row in eachrow(df_en)
-        add_edge!(meta_graph,unique_ids_new_dict[row."From-User-Id"],unique_ids_new_dict[row."To-User-Id"])
+
+
+    #4. and now add edges
+    for row in eachrow(df_en[1:nodenumber,:])
+        if (!(haskey(id_dict, row."To-User-Id")) || !(haskey(id_dict, row."From-User-Id")))
+            continue
+        end
+        if row."To-User-Id" != -1
+            #add a entry if not already present
+            if !(haskey(name_dict,id_dict[row."From-User-Id"]))
+                if !(haskey(name_dict,id_dict[row."To-User-Id"]))
+                    add_vertex!(meta_graph)
+                    #add entry to indexarr
+                    push!(indexarr,length(indexarr)+1)
+                    #position of name to dict
+                    name = id_dict[row."To-User-Id"]
+                    name_dict[name] = indexarr[end]
+                    #and name to nodelabels
+                    push!(nodelabels,id_dict[row."To-User-Id"])
+                    #and retweet count
+                    if !occursin("RT @", row."FullText")
+                        rt_dict[row."ScreenName"] = row."Retweet-Count"
+                        name_dict[row."ScreenName"] = indexarr[end]
+                    end
+                end
+                add_vertex!(meta_graph)
+                #add entry to indexarr
+                push!(indexarr,length(indexarr)+1)
+                #position of name to dict
+                name_dict[id_dict[row."From-User-Id"]] = indexarr[end]
+                #and name to nodelabels
+                push!(nodelabels,id_dict[row."From-User-Id"])
+                #and retweet count
+                if !occursin("RT @", row."FullText")
+                    rt_dict[row."ScreenName"] = row."Retweet-Count"
+                    name_dict[row."ScreenName"] = indexarr[end]
+                end
+                add_edge!(meta_graph,name_dict[id_dict[row."From-User-Id"]],name_dict[id_dict[row."To-User-Id"]])
+                continue
+            end
+            if !(haskey(name_dict,id_dict[row."To-User-Id"]))
+                if !(haskey(name_dict,id_dict[row."From-User-Id"]))
+                    add_vertex!(meta_graph)
+                    #add entry to indexarr
+                    push!(indexarr,length(indexarr)+1)
+                    #position of name to dict
+                    name_dict[id_dict[row."From-User-Id"]] = indexarr[end]
+                    #and name to nodelabels
+                    push!(nodelabels,id_dict[row."From-User-Id"])
+                    #and retweet count
+                    if !occursin("RT @", row."FullText")
+                        rt_dict[row."ScreenName"] = row."Retweet-Count"
+                        name_dict[row."ScreenName"] = indexarr[end]
+                    end
+                end
+                add_vertex!(meta_graph)
+                #add entry to indexarr
+                push!(indexarr,length(indexarr)+1)
+                #position of name to dict
+                name_dict[id_dict[row."To-User-Id"]] = indexarr[end]
+                #and name to nodelabels
+                push!(nodelabels,id_dict[row."To-User-Id"])
+                #and retweet count
+                if !occursin("RT @", row."FullText")
+                    rt_dict[row."ScreenName"] = row."Retweet-Count"
+                end
+                add_edge!(meta_graph,name_dict[id_dict[row."From-User-Id"]],name_dict[id_dict[row."To-User-Id"]])
+                continue
+            end
+            add_edge!(meta_graph,name_dict[id_dict[row."From-User-Id"]],name_dict[id_dict[row."To-User-Id"]])
+        end
     end
-    return meta_graph, nodelabels
+    #and get the rt counts in order
+    nodesizes = ones(length(nodelabels))
+    nodecolors = [colorant"black" for i in 1:length(nodelabels)]
+    @simd for i in collect(keys(rt_dict))
+        #set the index of the nodesizes array to the screen name -> position mapping of the name dict
+        #to the rt count entry of the rt dict
+        try
+            nodesizes[name_dict[i]] = rt_dict[i]
+            try
+                b = Int16(round(scale(0,10000,0,256,nodesizes[name_dict[i]])))
+                b > 256 && (b = 256)
+                nodecolors[name_dict[i]]=cgrad(:viridis)[b]
+
+            catch
+            end
+        catch
+        end
+    end
+    return meta_graph, nodelabels, nodesizes, nodecolors
 end
 
-graph, labels = create_graph(c[end-2005:end,:])
+df_random = df_en[shuffle(axes(df_en,1)),:]
+@time graph,labels,sizes,colors = create_graph(df_en,1000)
 plot_graph(graph,labels)
+
+
+#
+# graph, labels = create_graph(c[end-2005:end,:])
+# plot_graph(graph,labels)
 
 #for each x days in timeframe
 function for_x_days(x,df_en,func)
@@ -153,4 +257,4 @@ end
 function tf(df)
     println(nrow(df))
 end
-for_x_days(7,df_full,tf)
+# for_x_days(7,df_full,tf)

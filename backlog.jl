@@ -116,3 +116,28 @@ CSV.write("Data\\V3\\df_even_dates.csv",df_full)
 CSV.write("Data\\V3\\df_even_dates_ids.csv",df_ids)
 
 dates = [Date(match(r"^[^\s]+",hashtag_df[i,:CreatedAt]).match,"m/d/y") for i in 1:nrow(hashtag_df)]
+
+#old df loading
+df_random = DataFrame!(CSV.File("Data\\V3\\df_even_dates.csv"))
+df_random = df_en[shuffle(axes(df_en,1)),:]
+df_random = df_random[1:10000000,:]
+
+a = alternating_mixing(df_random)
+df_random = a
+
+#convert row of df to int
+df_en[!, "From-User-Id"] = Int.(parse.(Float64, df_en[:, "From-User-Id"]))
+
+#checking the df for trump content
+dropmissing!(df_en)
+filter!(x-> !ismissing(x."From-User-Id"), df_en)
+#tweets from trump
+println(filter(x-> Int(x."From-User-Id") ==   25073877, df_en))
+#tweets from screen name trump
+println(filter(x-> x."ScreenName" == "Donald J. Trump", df_en))
+#tweets with wrong trump id
+a = filter(x-> Int(x."From-User-Id") ==   1108353072747692032, df_en)
+println(Int(a[1,"To-User-Id"]))
+#get trump status
+println(filter(x-> Int(x."From-User-Id") ==  1208937404322795523, df_en))
+println(size(filter(x-> x."To-User-Id" != -1, df_en)))

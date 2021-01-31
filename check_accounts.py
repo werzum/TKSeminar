@@ -26,7 +26,7 @@ bom = botometer.Botometer(wait_on_ratelimit=True,
                           rapidapi_key=rapidapi_key,
                           **twitter_app_auth)
 
-start_at = 70000  # start at specific line
+start_at = 32000  # start at specific line
 checks_number = 2000  # number of accounts to be checked
 
 TARGET_FILE = 'random100,000_cleaned_df_final.csv'  # file to be opened
