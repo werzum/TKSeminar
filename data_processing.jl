@@ -212,7 +212,7 @@ function create_graph(df_en,nodenumber)
 
                 b = Int16(round(scale(0,1,0,256,bot_dict[i])))
                 b > 256 && (b = 256)
-                nodecolors[name_dict[i]]=cgrad(:viridis)[b]
+                nodecolors[name_dict[i]]=cgrad(:berlin)[b]
 
             catch
             end
