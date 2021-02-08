@@ -6,26 +6,30 @@ function centralities(meta_graph)
 
     #these are too slow for 1ml networks
     #print the global cc
-    print("global cc is $(global_clustering_coefficient(graph))")
+    print("global cc is $(global_clustering_coefficient(meta_graph))")
     #and the betweenness with 0s removed to shrink the graph somewhat
-    betweenness = betweenness_centrality(graph)
+    betweenness = betweenness_centrality(meta_graph)
     betweenness_filtered = filter(x->x!=0 && x<0.01, betweenness)
-    display(histogram(betweenness_filtered, ylabel="Betweenness", label=""))
+    if betweenness_filtered
+        isplay(histogram(betweenness_filtered, ylabel="Betweenness", label=""))
+    end
 end
+
+centralities(graph_h)
 
 create_histogram(graph)
 
 using GraphRecipes, Plots
 using LightGraphs
 
-function plot_graph(graph, labels, sizes, colors)
+function plot_graph(graph, labels, sizes, labelsizes, colors)
     #plot the graph with node labels for the underlying graph
-    draw(PNG("mygraph.png", 2000,2000), gplot(graph, nodesize = sizes,NODESIZE=0.04, nodelabel = labels, nodelabelsize = labelsizes, nodefillc = colors, NODELABELSIZE=5))
+    draw(PNG("mygraph.png", 2000,2000), gplot(graph, nodesize = sizes,NODESIZE=0.03, nodelabel = labels, nodelabelsize = labelsizes, nodefillc = colors, NODELABELSIZE=7))
 end
 
-labelsizes = sqrt.(sizes)
+labelsizes = sizes
 #need to scale the sizes so that they are more evenly distributed
-@time plot_graph(graph,labels,sizes, colors)
+plot_graph(graph,labels,sizes, labelsizes, colors)
 gplot(graph;nodelabel = labels)
 
 # create_histogram(graph)

@@ -124,8 +124,6 @@ function create_graph(df_en,nodenumber)
     @simd for row in eachrow(df_en)
         if !occursin("RT @", row."FullText")
             rt_dict[row."ScreenName"] += row."Retweet-Count"
-        else
-            rt_dict[row."ScreenName"] = 1
         end
     end
 
@@ -202,7 +200,7 @@ function create_graph(df_en,nodenumber)
     end
     #and get the rt counts in order
     nodesizes = ones(length(nodelabels))
-    nodecolors = [colorant"black" for i in 1:length(nodelabels)]
+    nodecolors = [colorant"yellow" for i in 1:length(nodelabels)]
     @simd for i in collect(keys(rt_dict))
         #set the index of the nodesizes array to the screen name -> position mapping of the name dict
         #to the rt count entry of the rt dict
@@ -212,7 +210,7 @@ function create_graph(df_en,nodenumber)
 
                 b = Int16(round(scale(0,1,0,256,bot_dict[i])))
                 b > 256 && (b = 256)
-                nodecolors[name_dict[i]]=cgrad(:berlin)[b]
+                nodecolors[name_dict[i]]=cgrad(:thermal)[b]
 
             catch
             end
@@ -224,7 +222,8 @@ function create_graph(df_en,nodenumber)
 end
 
 df_random = df_en[shuffle(axes(df_en,1)),:]
-@time graph,labels,sizes,colors = create_graph(df_en,5000)
+@time graph,labels,sizes,colors = create_graph(df_en,nrow(df_en))
+@time graph_h,labels_h,sizes_h,colors_h = create_graph(df_hashtag, nrow(df_hashtag))
 plot_graph(graph,labels)
 
 
