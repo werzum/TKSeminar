@@ -107,10 +107,12 @@ function create_graph(df_en,nodenumber)
     indexarr = [1:length(names)...]
     name_dict = Dict(zip(names,indexarr))
     nodelabels = names
-    #and create dict of names and their id
+    #and create dict of names and their id and of their bot score
     id_dict = Dict()
+    bot_dict = Dict()
     @simd for row in eachrow(df_en)
         id_dict[row."From-User-Id"] = row."ScreenName"
+        bot_dict[row."ScreenName"] = row."en_cap"
     end
 
     #3. add #nr unique names to graph
@@ -122,8 +124,6 @@ function create_graph(df_en,nodenumber)
     @simd for row in eachrow(df_en)
         if !occursin("RT @", row."FullText")
             rt_dict[row."ScreenName"] += row."Retweet-Count"
-        else
-            rt_dict[row."ScreenName"] = 1
         end
     end
 
@@ -200,27 +200,30 @@ function create_graph(df_en,nodenumber)
     end
     #and get the rt counts in order
     nodesizes = ones(length(nodelabels))
-    nodecolors = [colorant"black" for i in 1:length(nodelabels)]
+    nodecolors = [colorant"yellow" for i in 1:length(nodelabels)]
     @simd for i in collect(keys(rt_dict))
         #set the index of the nodesizes array to the screen name -> position mapping of the name dict
         #to the rt count entry of the rt dict
         try
             nodesizes[name_dict[i]] = rt_dict[i]
             try
-                b = Int16(round(scale(0,10000,0,256,nodesizes[name_dict[i]])))
+
+                b = Int16(round(scale(0,1,0,256,bot_dict[i])))
                 b > 256 && (b = 256)
-                nodecolors[name_dict[i]]=cgrad(:viridis)[b]
+                nodecolors[name_dict[i]]=cgrad(:thermal)[b]
 
             catch
             end
         catch
         end
     end
+    nodesizes = sqrt.(sqrt.(nodesizes))
     return meta_graph, nodelabels, nodesizes, nodecolors
 end
 
 df_random = df_en[shuffle(axes(df_en,1)),:]
-@time graph,labels,sizes,colors = create_graph(df_en,1000)
+@time graph,labels,sizes,colors = create_graph(df_en,nrow(df_en))
+@time graph_h,labels_h,sizes_h,colors_h = create_graph(df_hashtag, nrow(df_hashtag))
 plot_graph(graph,labels)
 
 

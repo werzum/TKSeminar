@@ -4,4 +4,4 @@ using PackageCompiler, Dictionaries, Distributed, Dates, JSON3, JSON, Random, St
 include("plotting.jl")
 include("data_processing.jl")
 
-df_en = DataFrame!(CSV.File("df_final.csv";threaded=false))
+df_en = DataFrame!(CSV.File("botometer.csv";threaded=false))
